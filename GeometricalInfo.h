@@ -1,0 +1,152 @@
+/*
+  SyneRBI Synergistic Image Reconstruction Framework (SIRF)
+  Copyright 2018 Commonwealth Scientific and Industrial Research Organisation's
+  Australian eHealth Research Organisation
+  Copyright 2020 Rutherford Appleton Laboratory STFC
+  Copyright 2019 - 2020 University College London
+
+  This is software developed for the Collaborative Computational
+  Project in Synergistic Reconstruction for Biomedical Imaging (formerly CCP PETMR)
+  (http://www.ccpsynerbi.ac.uk/).
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+  http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#ifndef SIRF_GEOMETRICAL_INFO_TYPE
+#define SIRF_GEOMETRICAL_INFO_TYPE
+
+#include <array>
+#include <string>
+
+namespace sirf {
+
+template <int num_physical_dimensions, int num_index_dimensions>
+class GeometricalInfo {
+public:
+	typedef std::array<float, num_physical_dimensions>     Coordinate;
+	typedef std::array<unsigned int, num_index_dimensions> Index;
+	// Eventually something here like
+	// Coordinate transform_index_to_physical_point(Index)
+	// Index transform_physical_point_to_index(Coordinate)
+
+	virtual bool operator==(const GeometricalInfo& vgi) const = 0;
+	virtual bool operator!=(const GeometricalInfo& vgi) const = 0;
+	/// Print info
+    virtual void print_info() const = 0;
+	virtual std::string get_info() const = 0;
+};
+
+
+template <int num_dimensions>
+class VoxelisedGeometricalInfo :
+	public GeometricalInfo<num_dimensions, num_dimensions> {
+private:
+	typedef GeometricalInfo<num_dimensions, num_dimensions> BaseType;
+
+public:
+	// TODO: Why to I have to define these again?
+	typedef typename BaseType::Coordinate Coordinate;
+	typedef typename BaseType::Index Index;
+
+	/*!
+	   Offset is the coordinate of the center of the first voxel in physical
+	   space.
+	*/
+	typedef Coordinate Offset;
+	/*!
+	   Spacing is the physical distance between voxels in each dimensions.
+	*/
+	typedef Coordinate Spacing;
+	/*!
+	   Size is the number of voxels in each dimension.
+	*/
+	typedef Index Size;
+	/*!
+	   Each vector in Direction tells the direction of the axis in LPS
+	   physical space.
+	*/
+	typedef std::array<Coordinate, num_dimensions> DirectionMatrix;
+	/*!
+	   Each vector in Direction tells the direction of the axis in LPS
+	   physical space.
+	*/
+	typedef std::array<std::array<float, num_dimensions+1>, num_dimensions+1>
+		TransformMatrix;
+
+
+	VoxelisedGeometricalInfo(
+		const Offset& _offset, const Spacing& _spacing,
+		const Size& _size, const DirectionMatrix& _direction);
+	virtual ~VoxelisedGeometricalInfo() {};
+
+	virtual bool operator==(const GeometricalInfo<num_dimensions, num_dimensions>& gi) const
+	{
+		const VoxelisedGeometricalInfo& vgi = (const VoxelisedGeometricalInfo&)gi;
+		float eps = 0.01;
+		float delta = 0.1;
+		return
+			near_(_offset, vgi.get_offset(), eps) &&
+			near_(_spacing, vgi.get_spacing(), eps) &&
+			_size == vgi.get_size() &&
+			near_(_direction, vgi.get_direction(), delta);
+	}
+	virtual bool operator!=(const GeometricalInfo<num_dimensions, num_dimensions>& gi) const
+	{
+		const VoxelisedGeometricalInfo& vgi = (const VoxelisedGeometricalInfo&)gi;
+		return !(*this == vgi);
+	}
+    const Offset get_offset() const;
+    const Spacing get_spacing() const;
+    const Size get_size() const;
+    const DirectionMatrix get_direction() const;
+
+    const TransformMatrix calculate_index_to_physical_point_matrix() const;
+
+    /// Print info
+	virtual void print_info() const;
+	virtual std::string get_info() const;
+
+private:
+	Offset _offset;
+	Spacing _spacing;
+	Size _size;
+	DirectionMatrix _direction;
+	static bool near_(const Coordinate& x, const Coordinate& y, float eps)
+	{
+		float t = 0;
+		for (int i = 0; i < num_dimensions; i++) {
+			float xi = x[i];
+			float yi = y[i];
+			t = std::max(t, std::abs(xi - yi));
+		}
+		return t <= eps;
+	}
+	static bool near_(const DirectionMatrix& x, const DirectionMatrix& y, float eps)
+	{
+		float t = 0;
+		for (int i = 0; i < num_dimensions; i++) {
+			for (int j = 0; j < num_dimensions; j++) {
+				float xij = x[i][j];
+				float yij = y[i][j];
+				t = std::max(t, std::abs(xij - yij));
+			}
+		}
+		return t <= eps;
+	}
+};
+
+typedef GeometricalInfo<3, 3> GeometricalInfo3D;
+typedef VoxelisedGeometricalInfo<3> VoxelisedGeometricalInfo3D;
+typedef VoxelisedGeometricalInfo<3>::TransformMatrix TransformMatrix3D;
+
+}
+
+#endif
